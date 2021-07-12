@@ -1,0 +1,109 @@
+#! /usr/bin/env stap
+
+@define ONLY_TRACE_TCP_PORT %(17971%)
+
+probe begin {
+    println("begin")
+}
+
+function cast_sock(sk) {
+    return &@cast(sk, "sock", "kernel<net/sock.h>");
+}
+
+function sk_common(sk) {
+    return &cast_sock(sk)->__sk_common;
+}
+
+function sk_family(sk) {
+    return sk_common(sk)->skc_family;
+}
+
+function sk_type(sk) {
+    return cast_sock(sk)->sk_type;
+}
+
+function inet_sport(sk) {
+    return ntohs(@inet_sock_cast(sk)->inet_sport);
+}
+
+function inet_dport(sk) {
+    return ntohs(sk_common(sk)->skc_dport);
+}
+
+function inet_num(sk) {
+    return sk_common(sk)->skc_num;
+}
+
+function tcp_sk(sk) {
+    return &@cast(sk, "tcp_sock", "kernel<linux/tcp.h>");
+}
+
+function interesting_sk(sk) {
+    if (!sk)
+        return 0;
+
+    /* Only even trace AF_INET SOCK_STREAM TCPv4 */
+    if (sk_family(sk) != 2 || sk_type(sk) != 1)
+        return 0;
+
+    if (tcp_sk(sk)->authopt_info)
+        return 1;
+
+    %( @ONLY_TRACE_TCP_PORT != 0 %?
+        if (inet_sport(sk) != @ONLY_TRACE_TCP_PORT || inet_dport(sk) != @ONLY_TRACE_TCP_PORT || inet_num(sk) != @ONLY_TRACE_TCP_PORT)
+            return 0;
+    %:%)
+
+    return 1;
+}
+
+function ihdr:string() {
+    return sprintf("%-*s -> %s", 2*indent_depth(+1), "", ppfunc());
+}
+
+function ohdr:string() {
+    return sprintf("%-*s <- %s", 2*indent_depth(-1), "", ppfunc());
+}
+
+function ehdrl:string() {
+    return sprintf("%-*s == %s", 2*indent_depth(0), "", pp())
+}
+
+probe focus_func = kernel.function("tcp_transmit_skb") {}
+probe focus_func += kernel.function("__tcp_transmit_skb") {}
+probe focus_func += kernel.function("tcp_authopt_init_options") {}
+probe focus_func += kernel.function("tcp_authopt_hash") {}
+probe focus_func += kernel.function("tcp_create_openreq_child") {}
+probe focus_func += kernel.function("tcp_established_options") {}
+probe focus_func += kernel.function("tcp_v4_syn_recv_sock") {}
+
+probe focus_line += kernel.statement("tcp_authopt_init_options@*:*") {}
+
+probe focus_func {
+    if (!interesting_sk($sk))
+        next;
+    printf("%s: caller: %s parms: %s\n", ihdr(), caller(), $$parms);
+    printf("%s: sk=%p sport=%d dport=%d\n", ehdrl(), $sk, inet_sport($sk), inet_dport($sk));
+}
+
+probe focus_func.return {
+    sk = @entry($sk);
+    if (!interesting_sk(sk))
+        next;
+    printf("%s\n", ohdr())
+}
+
+probe focus_line {
+    if (@defined($sk) && !interesting_sk($sk))
+        next;
+    printf("%s: vars: %s\n", ehdrl(), $$vars)
+}
+
+probe kernel.function("tcp_authopt_init_options").return {
+    sk = @entry($sk)
+    opts = @entry($opts)
+    opts = &@cast(opts, "tcp_out_options");
+    if (!interesting_sk(sk))
+        next;
+    printf("%s: opts.authopt_key=%p sk=%p\n", ehdrl(), opts->authopt_key, sk)
+}
