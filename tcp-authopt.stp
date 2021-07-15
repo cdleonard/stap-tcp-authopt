@@ -69,7 +69,8 @@ function ehdrl:string() {
     return sprintf("%-*s == %s", 2*indent_depth(0), "", pp())
 }
 
-probe focus_func = kernel.function("tcp_transmit_skb") {}
+// normally inlined:
+//probe focus_func += kernel.function("tcp_transmit_skb") {}
 probe focus_func += kernel.function("__tcp_transmit_skb") {}
 probe focus_func += kernel.function("tcp_authopt_init_options") {}
 probe focus_func += kernel.function("tcp_authopt_hash") {}
