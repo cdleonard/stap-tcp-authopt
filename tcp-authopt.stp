@@ -82,6 +82,7 @@ probe focus_func += kernel.function("tcp_authopt_hash") {}
 probe focus_func += kernel.function("tcp_create_openreq_child") {}
 probe focus_func += kernel.function("tcp_established_options") {}
 probe focus_func += kernel.function("tcp_v4_syn_recv_sock") {}
+probe focus_func += kernel.function("__tcp_authopt_inbound_check") {}
 
 probe focus_func {
     if (!interesting_sk($sk))
@@ -99,6 +100,7 @@ probe focus_func.return {
 
 probe focus_line += kernel.statement("tcp_authopt_init_options@*:*") {}
 probe focus_line += kernel.statement("tcp_set_authopt*@*:*") {}
+probe focus_line += kernel.statement("*@net/ipv4/tcp_authopt.c:*") {}
 
 probe focus_line {
     if (@defined($sk) && !interesting_sk($sk))
