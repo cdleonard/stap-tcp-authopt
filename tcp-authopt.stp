@@ -2,20 +2,58 @@
 
 @define ONLY_TRACE_TCP_PORT %(17971%)
 
+%{
+#include <linux/net.h>
+#include <linux/socket.h>
+#include <net/tcp_states.h>
+%}
+
+function SOCK_STREAM:long() /* pure */ %{
+    STAP_RETVALUE = SOCK_STREAM;
+%}
+
+function SOCK_DGRAM:long() /* pure */ %{
+    STAP_RETVALUE = SOCK_DGRAM;
+%}
+
+function AF_INET:long() /* pure */ %{
+    STAP_RETVALUE = AF_INET;
+%}
+
+function AF_INET6:long() /* pure */ %{
+    STAP_RETVALUE = AF_INET6;
+%}
+
+function TCP_TIME_WAIT:long() /* pure */ %{
+    STAP_RETVALUE = TCP_TIME_WAIT;
+%}
+
+function TCP_NEW_SYN_RECV:long() /* pure */ %{
+    STAP_RETVALUE = TCP_NEW_SYN_RECV;
+%}
+
 probe begin {
     println("begin")
 }
 
-function cast_sock(sk) {
-    return &@cast(sk, "sock", "kernel<net/sock.h>");
+function cast_sock_common(sk) {
+    return &@cast(sk, "sock_common", "kernel<net/sock.h>");
 }
 
 function sk_common(sk) {
-    return &cast_sock(sk)->__sk_common;
+    return cast_sock_common(sk);
 }
 
 function sk_family(sk) {
     return sk_common(sk)->skc_family;
+}
+
+function sk_state(sk) {
+    return sk_common(sk)->skc_state;
+}
+
+function cast_sock(sk) {
+    return &@cast(sk, "sock", "kernel<net/sock.h>");
 }
 
 function sk_type(sk) {
@@ -38,20 +76,32 @@ function tcp_sk(sk) {
     return &@cast(sk, "tcp_sock", "kernel<linux/tcp.h>");
 }
 
+function tcp_twsk(sk) {
+    return &@cast(sk, "tcp_timewait_sock", "kernel<linux/tcp.h>");
+}
+
+function tcp_authopt_info(sk) {
+    /* minisocks do not contain a sk_type! */
+    if (sk_state(sk) == TCP_TIME_WAIT())
+        return tcp_twsk(sk)->tw_authopt_info;
+    else if (sk_state(sk) == TCP_NEW_SYN_RECV())
+        return 0;
+    else if (sk_type(sk) == SOCK_STREAM())
+        return tcp_sk(sk)->authopt_info;
+    else
+        return 0;
+}
+
 function interesting_sk(sk) {
     if (!sk)
         return 0;
 
-    /* Only SOCK_STREAM */
-    if (sk_type(sk) != 1)
-        return 0;
-
     /* Only AF_INET or AF_INET6 */
-    if (sk_family(sk) != 2 && sk_family(sk) != 10)
+    if (sk_family(sk) != AF_INET() && sk_family(sk) != AF_INET6())
         return 0;
 
     /* Always if authopt_info present */
-    if (tcp_sk(sk)->authopt_info)
+    if (tcp_authopt_info(sk))
         return 1;
 
     %( @ONLY_TRACE_TCP_PORT != 0 %?
