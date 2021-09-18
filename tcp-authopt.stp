@@ -6,7 +6,42 @@
 #include <linux/net.h>
 #include <linux/socket.h>
 #include <net/tcp_states.h>
+#include <linux/skbuff.h>
 %}
+
+function skb_network_header:long(skb:long) %{
+    STAP_RETVALUE = (long)skb_network_header((struct sk_buff*)STAP_ARG_skb);
+%}
+
+function skb_transport_header:long(skb:long) %{
+    STAP_RETVALUE = (long)skb_transport_header((struct sk_buff*)STAP_ARG_skb);
+%}
+
+function cast_tcphdr(arg) {
+    return &@cast(arg, "tcphdr", "kernel<linux/tcp.h>");
+}
+
+function cast_iphdr(arg) {
+    return &@cast(arg, "iphdr", "kernel<linux/ip.h>");
+}
+
+function cast_ipv6hdr(arg) {
+    return &@cast(arg, "ipv6hdr", "kernel<linux/ipv6.h>");
+}
+
+
+function skb_tcp_header(skb) {
+    return cast_tcphdr(skb_transport_header(skb))
+}
+
+function skb_ip_header(skb) {
+    return cast_iphdr(skb_network_header(skb))
+}
+
+function skb_ipv6_header(skb) {
+    return cast_ipv6hdr(skb_network_header(skb))
+}
+
 
 function SOCK_STREAM:long() /* pure */ %{
     STAP_RETVALUE = SOCK_STREAM;
@@ -31,10 +66,6 @@ function TCP_TIME_WAIT:long() /* pure */ %{
 function TCP_NEW_SYN_RECV:long() /* pure */ %{
     STAP_RETVALUE = TCP_NEW_SYN_RECV;
 %}
-
-probe begin {
-    println("begin")
-}
 
 function cast_sock_common(sk) {
     return &@cast(sk, "sock_common", "kernel<net/sock.h>");
@@ -80,6 +111,22 @@ function tcp_twsk(sk) {
     return &@cast(sk, "tcp_timewait_sock", "kernel<linux/tcp.h>");
 }
 
+probe begin {
+    println("begin")
+}
+
+function ihdr:string() {
+    return sprintf("%-*s -> %s", 2*indent_depth(+1), "", ppfunc());
+}
+
+function ohdr:string() {
+    return sprintf("%-*s <- %s", 2*indent_depth(-1), "", ppfunc());
+}
+
+function ehdrl:string() {
+    return sprintf("%-*s == %s", 2 + 2*indent_depth(0), "", pp())
+}
+
 function tcp_authopt_info(sk) {
     /* minisocks do not contain a sk_type! */
     if (sk_state(sk) == TCP_TIME_WAIT())
@@ -112,57 +159,102 @@ function interesting_sk(sk) {
     return 1;
 }
 
-function ihdr:string() {
-    return sprintf("%-*s -> %s", 2*indent_depth(+1), "", ppfunc());
+%( 0 == 1 %?
+/*
+ * Functions to track for indent_depth.
+ *
+ * None of these can be inline because the return probe fails
+ */
+probe focus_indent += kernel.function("__tcp_transmit_skb") {}
+probe focus_indent += kernel.function("__tcp_authopt_inbound_check") {}
+probe focus_indent += kernel.function("tcp_authopt_hash") {}
+probe focus_indent += kernel.function("tcp_v6_send_response") {}
+//probe focus_indent += kernel.function("tcp_v4_rcv") {}
+//probe focus_indent += kernel.function("tcp_v6_rcv") {}
+//probe focus_indent += kernel.function("tcp_v6_timewait_ack") {}
+//probe focus_indent += kernel.function("tcp_v6_send_ack") {}
+
+probe focus_indent {
+    if (!interesting_sk($sk))
+        next;
+    printf("%s\n", ihdr())
 }
 
-function ohdr:string() {
-    return sprintf("%-*s <- %s", 2*indent_depth(-1), "", ppfunc());
+probe focus_indent.return {
+    sk = @entry($sk);
+    if (!interesting_sk(sk))
+        next;
+    printf("%s return %s\n", ohdr(), $$return)
 }
+%:%)
 
-function ehdrl:string() {
-    return sprintf("%-*s == %s", 2*indent_depth(0), "", pp())
-}
-
-// normally inlined:
-//probe focus_func += kernel.function("tcp_transmit_skb") {}
+/*
+ * Function to print arguments of
+ * Can be inline
+ */
+%( 1 == 1 %?
 probe focus_func += kernel.function("__tcp_transmit_skb") {}
 probe focus_func += kernel.function("tcp_authopt_init_options") {}
 probe focus_func += kernel.function("tcp_authopt_hash") {}
 probe focus_func += kernel.function("tcp_create_openreq_child") {}
 probe focus_func += kernel.function("tcp_established_options") {}
-probe focus_func += kernel.function("tcp_v4_syn_recv_sock") {}
 probe focus_func += kernel.function("__tcp_authopt_inbound_check") {}
+probe focus_func += kernel.function("tcp_v4_syn_recv_sock") {}
+probe focus_func += kernel.function("tcp_v4_timewait_ack")? {}
+probe focus_func += kernel.function("tcp_v4_send_reset") {}
+probe focus_func += kernel.function("tcp_v4_send_ack")? {}
+probe focus_func += kernel.function("tcp_v6_syn_recv_sock") {}
+probe focus_func += kernel.function("tcp_v6_send_response") {}
+probe focus_func += kernel.function("tcp_v6_timewait_ack")? {}
+probe focus_func += kernel.function("tcp_v6_send_reset") {}
+probe focus_func += kernel.function("tcp_v6_send_ack")? {}
 
 probe focus_func {
     if (!interesting_sk($sk))
-        next;
-    printf("%s: caller: %s parms: %s\n", ihdr(), caller(), $$parms);
+        next
+    printf("%s: caller: %s parms: %s\n", ehdrl(), caller(), $$parms);
     printf("%s: sk=%p sport=%d dport=%d\n", ehdrl(), $sk, inet_sport($sk), inet_dport($sk));
 }
+%:%)
 
-probe focus_func.return {
-    sk = @entry($sk);
-    if (!interesting_sk(sk))
-        next;
-    printf("%s\n", ohdr())
-}
-
+%( 1 == 1 %?
+/* Areas to trace line-by-line: */
 probe focus_line += kernel.statement("tcp_authopt_init_options@*:*") {}
-probe focus_line += kernel.statement("tcp_set_authopt*@*:*") {}
-probe focus_line += kernel.statement("*@net/ipv4/tcp_authopt.c:*") {}
+//probe focus_line += kernel.statement("tcp_set_authopt*@*:*") {}
+//probe focus_line += kernel.statement("*@net/ipv4/tcp_authopt.c:*") {}
+//probe focus_line += kernel.statement("tcp_v6_send_response*@*:*") {}
 
 probe focus_line {
     if (@defined($sk) && !interesting_sk($sk))
         next;
     printf("%s: vars: %s\n", ehdrl(), $$vars)
 }
+%:%)
 
-probe kernel.function("tcp_authopt_init_options").return {
-    sk = @entry($sk)
-    opts = @entry($opts)
-    opts = &@cast(opts, "tcp_out_options");
-    if (!interesting_sk(sk))
-        next;
-    printf("%s: opts.authopt_key=%p sk=%p\n", ehdrl(), opts->authopt_key, sk)
+%( 0 == 1 %?
+/* HACK: trace RST signature backtrace */
+probe kernel.function("tcp_authopt_hash") {
+    th = skb_tcp_header($skb);
+    if (th->rst) {
+        printf("backtrace for RST signing:\n")
+        print_backtrace()
+    }
 }
+
+probe kernel.function("tcp_v4_authopt_hash_reply") {
+    if ($th->rst) {
+        printf("backtrace for RST signing:\n")
+        print_backtrace()
+    }
+}
+%:%)
+
+%( 0 == 1 %?
+/* Trace address families in __tcp_authopt_inbound_check */
+probe kernel.function("__tcp_authopt_inbound_check") {
+    printf("sk=%p sk_family=%d", $sk, sk_family($sk))
+    printf("skb=%p skb->protocol=%d", skb, skb->protocl)
+    iph = skb_ip_header($skb)
+    printf("iph=%p iph->version=%d", iph, ip6->version)
+}
+%:%)
