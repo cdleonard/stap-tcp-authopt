@@ -47,7 +47,7 @@ function cast_ipv6hdr(arg) {
 
 
 function skb_tcp_header(skb) {
-    return cast_tcphdr(skb_transport_header(skb))
+    return __get_skb_tcphdr(skb)
 }
 
 function skb_ip_header(skb) {
