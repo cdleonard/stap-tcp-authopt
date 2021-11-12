@@ -217,7 +217,9 @@ probe focus_func {
 
 %( 1 == 1 %?
 /* Areas to trace line-by-line: */
-probe focus_line += kernel.statement("tcp_authopt_init_options@*:*") {}
+probe focus_line += kernel.statement("print_tcpao_notice*@*:*") {}
+//probe focus_line += kernel.statement("tcp_authopt_init_options@*:*") {}
+//probe focus_line += kernel.statement("compute_packet_sne@*:*") {}
 //probe focus_line += kernel.statement("tcp_set_authopt*@*:*") {}
 //probe focus_line += kernel.statement("*@net/ipv4/tcp_authopt.c:*") {}
 //probe focus_line += kernel.statement("tcp_v6_send_response*@*:*") {}
