@@ -46,7 +46,8 @@ function cast_ipv6hdr(arg) {
 }
 
 
-function skb_tcp_header(skb) {
+/* Like tcp_hdr from include/linux/tcp.h */
+function tcp_hdr(skb) {
     return __get_skb_tcphdr(skb)
 }
 
@@ -58,6 +59,24 @@ function skb_ipv6_header(skb) {
     return cast_ipv6hdr(skb_network_header(skb))
 }
 
+function format_tcphdr:string(_th) {
+    th = cast_tcphdr(_th)
+    return sprintf("sport=%u dport=%u"
+            " seq=%u ack=%u doff=%u"
+            " flags=%04x%s%s%s%s%s%s"
+            " win=%u csum=%04x urg=%u",
+            ntohs(th->source), ntohs(th->dest),
+            ntohl(th->seq), ntohl(th->ack_seq),
+            th->doff,
+            kernel_short(th + 12) & 0x0FFF,
+            th->syn ? " SYN" : "",
+            th->fin ? " FIN" : "",
+            th->rst ? " RST" : "",
+            th->ack ? " ACK" : "",
+            th->psh ? " PSH" : "",
+            th->urg ? " URG" : "",
+            th->window, ntohs(th->check), ntohs(th->urg))
+}
 
 function SOCK_STREAM:long() /* pure */ %{
     STAP_RETVALUE = SOCK_STREAM;
@@ -249,3 +268,9 @@ probe focus_line {
     printf("%s: vars: %s\n", ehdrl(), $$vars)
 }
 %:%)
+
+probe kernel.function("print_tcpao_notice") {
+    th = tcp_hdr($skb);
+    printf("%s: %s\n", ehdrl(), kernel_string($msg));
+    printf("%s: th %s\n", ehdrl(), format_tcphdr(th));
+}
