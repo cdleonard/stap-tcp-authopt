@@ -214,7 +214,7 @@ probe focus_func {
     if (!interesting_sk($sk))
         next
     printf("%s: caller: %s parms: %s\n", ehdrl(), caller(), $$parms);
-    printf("%s: sk=%p sport=%d dport=%d\n", ehdrl(), $sk, inet_sport($sk), inet_dport($sk));
+    printf("%s: sk=%p state=%d sport=%d dport=%d\n", ehdrl(), $sk, sk_state($sk), inet_sport($sk), inet_dport($sk));
 }
 %:%)
 
