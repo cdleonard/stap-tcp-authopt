@@ -169,10 +169,6 @@ probe focus_indent += kernel.function("__tcp_transmit_skb") {}
 probe focus_indent += kernel.function("__tcp_authopt_inbound_check") {}
 probe focus_indent += kernel.function("tcp_authopt_hash") {}
 probe focus_indent += kernel.function("tcp_v6_send_response") {}
-//probe focus_indent += kernel.function("tcp_v4_rcv") {}
-//probe focus_indent += kernel.function("tcp_v6_rcv") {}
-//probe focus_indent += kernel.function("tcp_v6_timewait_ack") {}
-//probe focus_indent += kernel.function("tcp_v6_send_ack") {}
 
 probe focus_indent {
     if (!interesting_sk($sk))
