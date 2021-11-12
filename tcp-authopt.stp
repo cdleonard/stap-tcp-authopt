@@ -206,6 +206,9 @@ probe focus_func += kernel.function("tcp_v6_send_response") {}
 probe focus_func += kernel.function("tcp_v6_timewait_ack")? {}
 probe focus_func += kernel.function("tcp_v6_send_reset") {}
 probe focus_func += kernel.function("tcp_v6_send_ack")? {}
+probe focus_func += kernel.function("compute_packet_sne")? {}
+probe focus_func += kernel.function("tcp_authopt_hash_packet")? {}
+probe focus_func += kernel.function("tcp_authopt_get_isn")? {}
 
 probe focus_func {
     if (!interesting_sk($sk))
