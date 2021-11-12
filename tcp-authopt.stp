@@ -118,6 +118,10 @@ function sk_state(sk) {
     return sk_common(sk)->skc_state;
 }
 
+function sk_state_str:string(sk) {
+    return tcp_sockstate_str(sk_state(sk));
+}
+
 function cast_sock(sk) {
     return &@cast(sk, "sock", "kernel<net/sock.h>");
 }
