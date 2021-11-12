@@ -230,31 +230,3 @@ probe focus_line {
     printf("%s: vars: %s\n", ehdrl(), $$vars)
 }
 %:%)
-
-%( 0 == 1 %?
-/* HACK: trace RST signature backtrace */
-probe kernel.function("tcp_authopt_hash") {
-    th = skb_tcp_header($skb);
-    if (th->rst) {
-        printf("backtrace for RST signing:\n")
-        print_backtrace()
-    }
-}
-
-probe kernel.function("tcp_v4_authopt_hash_reply") {
-    if ($th->rst) {
-        printf("backtrace for RST signing:\n")
-        print_backtrace()
-    }
-}
-%:%)
-
-%( 0 == 1 %?
-/* Trace address families in __tcp_authopt_inbound_check */
-probe kernel.function("__tcp_authopt_inbound_check") {
-    printf("sk=%p sk_family=%d", $sk, sk_family($sk))
-    printf("skb=%p skb->protocol=%d", skb, skb->protocl)
-    iph = skb_ip_header($skb)
-    printf("iph=%p iph->version=%d", iph, ip6->version)
-}
-%:%)
