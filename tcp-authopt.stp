@@ -7,7 +7,7 @@
 @define ONLY_TRACE_TCP_PORT %(17971%)
 
 // Enable tracing of relevant indents
-@define TRACE_INDENT %(0%)
+@define TRACE_INDENT %(1%)
 
 // Enable tracing of parameters
 @define TRACE_PARAMS %(1%)
