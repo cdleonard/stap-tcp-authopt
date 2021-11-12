@@ -1,6 +1,22 @@
 #! /usr/bin/env stap
 
+// Config-like macros: {{{
+
+// Only trace this TCP port
+// Default is used by tcp-authopt-test
 @define ONLY_TRACE_TCP_PORT %(17971%)
+
+// Enable tracing of relevant indents
+@define TRACE_INDENT %(0%)
+
+// Enable tracing of parameters
+@define TRACE_PARAMS %(1%)
+
+// Enable line-by-line function of specific function
+@define TRACE_FOCUS_LINE %(1%)
+
+// Config-like macros region end }}}
+
 
 %{
 #include <linux/net.h>
@@ -159,7 +175,7 @@ function interesting_sk(sk) {
     return 1;
 }
 
-%( 0 == 1 %?
+%( @TRACE_INDENT == 1 %?
 /*
  * Functions to track for indent_depth.
  *
@@ -190,7 +206,7 @@ probe focus_indent.return {
  * Function to print arguments of
  * Can be inline
  */
-%( 1 == 1 %?
+%( @TRACE_PARAMS == 1 %?
 probe focus_func += kernel.function("__tcp_transmit_skb") {}
 probe focus_func += kernel.function("tcp_authopt_init_options") {}
 probe focus_func += kernel.function("tcp_authopt_hash") {}
@@ -218,7 +234,7 @@ probe focus_func {
 }
 %:%)
 
-%( 1 == 1 %?
+%( @TRACE_FOCUS_LINE == 1 %?
 /* Areas to trace line-by-line: */
 probe focus_line += kernel.statement("print_tcpao_notice*@*:*") {}
 //probe focus_line += kernel.statement("tcp_authopt_init_options@*:*") {}
