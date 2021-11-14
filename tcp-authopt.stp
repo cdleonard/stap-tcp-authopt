@@ -12,6 +12,9 @@
 // Enable tracing of parameters
 @define TRACE_PARAMS %(1%)
 
+// Enable tracing of Initial Sequence Number determination
+@define TRACE_ISN %(1%)
+
 // Enable line-by-line function of specific function
 @define TRACE_FOCUS_LINE %(1%)
 
@@ -278,3 +281,34 @@ probe kernel.function("print_tcpao_notice") {
     printf("%s: %s\n", ehdrl(), kernel_string($msg));
     printf("%s: th %s\n", ehdrl(), format_tcphdr(th));
 }
+
+%( @TRACE_ISN == 1 %?
+probe kernel.function("tcp_authopt_get_isn") {
+    sk = $sk
+    th = tcp_hdr($skb);
+    printf("%s sk=%p sk_state=%d sk_state=%s input=%d th=%s\n",
+            ehdrl(), sk, sk_state(sk), sk_state_str(sk), $input, format_tcphdr(th))
+    if (sk_state(sk) == @const("TCP_NEW_SYN_RECV")) {
+        rsk = &@cast(sk, "tcp_request_sock")
+        printf("%s tcp_request_sock rcv_isn=%08x snt_isn=%08x\n", ehdrl(), rsk->rcv_isn, rsk->snt_isn)
+    }
+}
+
+probe kernel.function("tcp_authopt_get_isn").return {
+    sisnptr = @entry($sisn);
+    disnptr = @entry($disn);
+    sk = @entry($sk);
+    input = @entry($input);
+    th = tcp_hdr(@entry($skb));
+    printf("%s %s *sisn=%08x *disn=%08x %s%s%s sk_state=%s seq=%08x ack=%08x\n",
+            ehdrl(), $$return,
+            0xFFFFFFFF & kernel_int(sisnptr),
+            0xFFFFFFFF & kernel_int(disnptr),
+            input ? " RECV" : " SEND",
+            th->syn ? " SYN" : "",
+            th->ack ? " ACK" : "",
+            sk_state_str(sk),
+            th->seq,
+            th->ack_seq);
+}
+%:%)
