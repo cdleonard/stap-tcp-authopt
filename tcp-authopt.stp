@@ -157,16 +157,24 @@ probe begin {
     println("begin")
 }
 
+/* Input header */
 function ihdr:string() {
     return sprintf("%-*s -> %s", 2*indent_depth(+1), "", ppfunc());
 }
 
+/* Output header */
 function ohdr:string() {
     return sprintf("%-*s <- %s", 2*indent_depth(-1), "", ppfunc());
 }
 
+/* Equals header */
+function ehdr:string() {
+    return sprintf("%-*s   == %s", 2*indent_depth(0), "", ppfunc());
+}
+
+/* Equals header with lineno */
 function ehdrl:string() {
-    return sprintf("%-*s == %s", 2 + 2*indent_depth(0), "", pp())
+    return sprintf("%-*s   == %s", 2*indent_depth(0), "", pp())
 }
 
 function tcp_authopt_info(sk) {
@@ -213,6 +221,7 @@ probe focus_indent += kernel.function("tcp_authopt_hash") {}
 probe focus_indent += kernel.function("tcp_v6_send_response") {}
 probe focus_indent += kernel.function("__tcp_authopt_calc_mac") {}
 probe focus_indent += kernel.function("tcp_authopt_hash_packet") {}
+probe focus_indent += kernel.function("tcp_authopt_shash_traffic_key") {}
 
 probe focus_indent {
     if (!interesting_sk($sk))
@@ -251,12 +260,13 @@ probe focus_func += kernel.function("tcp_v6_send_ack")? {}
 probe focus_func += kernel.function("compute_packet_sne")? {}
 probe focus_func += kernel.function("tcp_authopt_hash_packet")? {}
 probe focus_func += kernel.function("tcp_authopt_get_isn")? {}
+probe focus_func += kernel.function("tcp_authopt_shash_traffic_key")? {}
 
 probe focus_func {
     if (!interesting_sk($sk))
         next
-    printf("%s: caller: %s parms: %s\n", ehdrl(), caller(), $$parms);
-    printf("%s: sk=%p state=%d sport=%d dport=%d\n", ehdrl(), $sk, sk_state($sk), inet_sport($sk), inet_dport($sk));
+    printf("%s: parms: %s: caller: %s\n", ehdr(), $$parms, caller());
+    printf("%s: socket: sk=%p state=%d sport=%d dport=%d\n", ehdr(), $sk, sk_state($sk), inet_sport($sk), inet_dport($sk));
 }
 %:%)
 
@@ -278,8 +288,8 @@ probe focus_line {
 
 probe kernel.function("print_tcpao_notice") {
     th = tcp_hdr($skb);
-    printf("%s: %s\n", ehdrl(), kernel_string($msg));
-    printf("%s: th %s\n", ehdrl(), format_tcphdr(th));
+    printf("%s: %s\n", ehdr(), kernel_string($msg));
+    printf("%s: th %s\n", ehdr(), format_tcphdr(th));
 }
 
 %( @TRACE_ISN == 1 %?
@@ -287,10 +297,10 @@ probe kernel.function("tcp_authopt_get_isn") {
     sk = $sk
     th = tcp_hdr($skb);
     printf("%s sk=%p sk_state=%d sk_state=%s input=%d th=%s\n",
-            ehdrl(), sk, sk_state(sk), sk_state_str(sk), $input, format_tcphdr(th))
+            ehdr(), sk, sk_state(sk), sk_state_str(sk), $input, format_tcphdr(th))
     if (sk_state(sk) == @const("TCP_NEW_SYN_RECV")) {
         rsk = &@cast(sk, "tcp_request_sock")
-        printf("%s tcp_request_sock rcv_isn=%08x snt_isn=%08x\n", ehdrl(), rsk->rcv_isn, rsk->snt_isn)
+        printf("%s tcp_request_sock rcv_isn=%08x snt_isn=%08x\n", ehdr(), rsk->rcv_isn, rsk->snt_isn)
     }
 }
 
@@ -301,7 +311,7 @@ probe kernel.function("tcp_authopt_get_isn").return {
     input = @entry($input);
     th = tcp_hdr(@entry($skb));
     printf("%s %s *sisn=%08x *disn=%08x %s%s%s sk_state=%s seq=%08x ack=%08x\n",
-            ehdrl(), $$return,
+            ehdr(), $$return,
             0xFFFFFFFF & kernel_int(sisnptr),
             0xFFFFFFFF & kernel_int(disnptr),
             input ? " RECV" : " SEND",
