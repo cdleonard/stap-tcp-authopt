@@ -221,7 +221,7 @@ probe focus_indent += kernel.function("tcp_authopt_hash") {}
 probe focus_indent += kernel.function("tcp_v6_send_response") {}
 probe focus_indent += kernel.function("__tcp_authopt_calc_mac") {}
 probe focus_indent += kernel.function("tcp_authopt_hash_packet") {}
-probe focus_indent += kernel.function("tcp_authopt_shash_traffic_key") {}
+//probe focus_indent += kernel.function("tcp_authopt_shash_traffic_key") {}
 
 probe focus_indent {
     if (!interesting_sk($sk))
@@ -304,7 +304,7 @@ probe kernel.function("tcp_authopt_get_isn") {
     }
 }
 
-probe kernel.function("tcp_authopt_get_isn").return {
+probe kernel.function("tcp_authopt_get_isn").return? {
     sisnptr = @entry($sisn);
     disnptr = @entry($disn);
     sk = @entry($sk);
